@@ -1,0 +1,28 @@
+{
+    "pesos_numericos": {
+        "valor_divida_mil": -3.0,
+        "tempo_inadimplencia_dias": -1.5
+    },
+    "pesos_categoricos": {
+        "porte_cliente_Grande": 7.0,
+        "porte_cliente_Médio": 2.0,
+        "porte_cliente_Pequeno": -4.0,
+        
+        "score_risco_interno_A": 10.0,
+        "score_risco_interno_B": 5.0,
+        "score_risco_interno_C": 0.0,
+        "score_risco_interno_D": -8.0,
+        "score_risco_interno_F": -15.0,
+
+        "regiao_Sul": 3.0,
+        "regiao_Sudeste": 3.0,
+        "regiao_Centro-Oeste": 1.0,
+        "regiao_Nordeste": -2.0,
+        "regiao_Norte": -2.0,
+        
+        "ramo_atuacao_cliente_Indústria": 10.0,
+        "ramo_atuacao_cliente_Distribuidor": 8.0,
+        "ramo_atuacao_cliente_Cooperativa": 2.0,
+        "ramo_atuacao_cliente_Produtor": -1.0
+    }
+}

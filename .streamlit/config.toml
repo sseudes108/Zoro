@@ -1,0 +1,20 @@
+[theme]
+
+# Cor primária: O verde icônico do cabelo e do haramaki do Zoro.
+# Usado em widgets interativos como botões, sliders, etc.
+primaryColor="#00A86B" # Um verde esmeralda forte e vibrante
+
+# Fundo principal: Um cinza bem escuro, quase preto, representando o traje e a seriedade dele.
+backgroundColor="#0F1116"
+
+# Fundo secundário: Um cinza-azulado um pouco mais claro para a barra lateral e outros elementos.
+# Cria uma profundidade, como as sombras no seu traje.
+secondaryBackgroundColor="#1E2128"
+
+# Cor do texto: Um branco suave para garantir legibilidade máxima no fundo escuro.
+# Representa o brilho das lâminas de suas espadas.
+textColor="#FAFAFA"
+
+# Fonte: Mantemos a sans-serif padrão para garantir a legibilidade dos dados,
+# que reflete a precisão e a clareza de um mestre espadachim.
+font="sans serif"
