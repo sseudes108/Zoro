@@ -92,9 +92,9 @@ def renderizar_aba_simulacao(df_scored: pd.DataFrame, simul_count: int, model_na
     with col1:
         cenario = st.selectbox("Cenário", ["Pessimista", "Média", "Otimista"], key=f"{key_prefix}_cenario", index=0)
     with col2:
-        custo_op = st.number_input("Custo de Operação %", 1, 100, 25, key=f"{key_prefix}_cop")
+        custo_op = st.number_input("Custo de Operação %", 1.0, 100.0, 25.0, step=0.01, key=f"{key_prefix}_cop")
     with col3:
-        retorno = st.number_input("Retorno Desejado %", 1, 1000, 50, key=f"{key_prefix}_roi")
+        retorno = st.number_input("Retorno Desejado %", 1.0, 1000.0, 50.0, step=0.01, key=f"{key_prefix}_roi")
 
     # --- Lógica de Simulação ---
     resultados_mc = Zoro.rodar_simulacao_montecarlo(df_scored, simul_count)

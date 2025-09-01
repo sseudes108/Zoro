@@ -11,6 +11,11 @@ def _preprocessar_para_pca(df_features: pd.DataFrame) -> pd.DataFrame:
     Prepara o DataFrame para a análise de PCA, aplicando imputação de dados,
     one-hot encoding e padronização (scaling).
     """
+    df_features = df_features.drop(columns=[
+        'email','telefone','endereco','nome_completo',
+        'data_nascimento', 'razao_social', 'documento', 'socios',
+    ])
+    
     colunas_numericas = df_features.select_dtypes(include=np.number).columns.tolist()
     colunas_categoricas = df_features.select_dtypes(include=['object', 'category']).columns.tolist()
     
