@@ -1,108 +1,112 @@
+# Control/Score_Manual/SM_core.py
+
 import json
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 
-# --- Bloco de Funções Modulares ---
+# --- Funções Auxiliares (Lógica Interna) ---
 
 def _carregar_configuracao_pesos(caminho_pesos: str) -> Dict[str, Any]:
-    """
-    Carrega os pesos e configurações a partir de um arquivo JSON.
-    Isso centraliza a lógica de negócios, facilitando ajustes.
-    """
+    """Carrega o arquivo JSON completo com as configurações de PF e PJ."""
     with open(caminho_pesos, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def _preprocessar_features(df: pd.DataFrame, colunas_numericas: List[str], colunas_categoricas: List[str]) -> pd.DataFrame:
+def _calcular_score_segmento(df_segmento: pd.DataFrame, config_pesos_segmento: Dict[str, Any]) -> pd.DataFrame:
     """
-    Aplica one-hot encoding e standard scaling nas colunas especificadas.
-    Retorna um DataFrame processado e pronto para o cálculo de score.
+    Função core que calcula o score para um segmento específico (PF ou PJ),
+    agora com logging detalhado para monitoramento do processo.
     """
-    df_categoricas_encoded = pd.get_dummies(df[colunas_categoricas])
-    scaler = StandardScaler()
-    df_numericas_scaled = pd.DataFrame(scaler.fit_transform(df[colunas_numericas]), columns=colunas_numericas, index=df.index)
-    return pd.concat([df_numericas_scaled, df_categoricas_encoded], axis=1)
+    if df_segmento.empty:
+        print("   [LOG] Segmento vazio, pulando processamento.")
+        return pd.DataFrame()
 
-def _calcular_score_bruto(df_processado: pd.DataFrame, pesos_numericos: Dict[str, float], pesos_categoricos: Dict[str, float]) -> pd.Series:
-    """
-    Calcula o score bruto ponderando as features processadas.
-    O score é uma métrica de ranking antes da normalização sigmoidal.
-    """
-    score = pd.Series(0, index=df_processado.index, dtype=float)
+    pesos_numericos = config_pesos_segmento.get('pesos_numericos', {})
+    pesos_categoricos = config_pesos_segmento.get('pesos_categoricos', {})
+    
+    # --- LOG: Identificação de Features ---
+    colunas_numericas_relevantes = list(pesos_numericos.keys())
+    colunas_categoricas_relevantes = list(set([k.rsplit('_', 1)[0] for k in pesos_categoricos.keys()]))
+    colunas_numericas_presentes = [col for col in colunas_numericas_relevantes if col in df_segmento.columns]
+    colunas_categoricas_presentes = [col for col in colunas_categoricas_relevantes if col in df_segmento.columns]
+    
+    print(f"   [LOG] Features Numéricas Identificadas: {colunas_numericas_presentes}")
+    print(f"   [LOG] Features Categóricas Identificadas: {colunas_categoricas_presentes}")
+    
+    df_features = df_segmento[colunas_numericas_presentes + colunas_categoricas_presentes].copy()
+
+    # --- Pré-processamento Robusto ---
+    if colunas_numericas_presentes:
+        imputer = SimpleImputer(strategy='mean')
+        df_features.loc[:, colunas_numericas_presentes] = imputer.fit_transform(df_features[colunas_numericas_presentes])
+        print("   [LOG] Imputação de dados numéricos ausentes concluída.")
+
+    df_categoricas_encoded = pd.get_dummies(df_features[colunas_categoricas_presentes])
+    
+    df_numericas_scaled = pd.DataFrame(index=df_features.index)
+    if colunas_numericas_presentes:
+        numeric_data = df_features[colunas_numericas_presentes]
+        colunas_com_variancia = numeric_data.columns[numeric_data.var() > 0]
+        
+        if not colunas_com_variancia.empty:
+            scaler = StandardScaler()
+            scaled_data = scaler.fit_transform(numeric_data[colunas_com_variancia])
+            df_numericas_scaled = pd.DataFrame(scaled_data, columns=colunas_com_variancia, index=df_features.index)
+            print("   [LOG] Padronização (scaling) das features numéricas concluída.")
+        else:
+            print("   [LOG] Nenhuma feature numérica com variância para padronizar.")
+
+    df_processado = pd.concat([df_numericas_scaled, df_categoricas_encoded], axis=1)
+    print(f"   [LOG] DataFrame final para scoring criado com {df_processado.shape[0]} linhas e {df_processado.shape[1]} colunas.")
+
+    # --- Cálculo do Score ---
+    score_bruto = pd.Series(0, index=df_processado.index, dtype=float)
     todos_pesos = {**pesos_numericos, **pesos_categoricos}
     for feature, peso in todos_pesos.items():
         if feature in df_processado.columns:
-            score += df_processado[feature] * peso
-    return score
+            score_bruto += df_processado[feature] * peso
+    
+    print(f"   [LOG] Score bruto calculado. Resumo: Mín={score_bruto.min():.2f}, Média={score_bruto.mean():.2f}, Máx={score_bruto.max():.2f}")
+            
+    if score_bruto.var() == 0:
+        probabilidade = np.full(shape=len(score_bruto), fill_value=0.5)
+        print("   [LOG] Variância do score é zero. Probabilidade definida como 0.5 para todos.")
+    else:
+        scaler_score = StandardScaler()
+        scores_padronizados = scaler_score.fit_transform(score_bruto.values.reshape(-1, 1))
+        probabilidade = 1 / (1 + np.exp(-scores_padronizados))
+        print("   [LOG] Score convertido para probabilidade via função sigmoide.")
 
-def _converter_score_para_probabilidade(score_bruto: pd.Series) -> np.ndarray:
-    """
-    Converte o score de ranking em uma probabilidade (0 a 1) usando a função sigmoide.
-    Isso torna o resultado mais interpretável como uma 'chance de recuperação'.
-    """
-    scaler = StandardScaler()
-    scores_padronizados = scaler.fit_transform(score_bruto.values.reshape(-1, 1))
-    return 1 / (1 + np.exp(-scores_padronizados))
+    df_resultado_segmento = df_segmento.copy()
+    df_resultado_segmento['score_ranking_bruto'] = score_bruto
+    df_resultado_segmento['score_recuperacao'] = probabilidade
+    
+    return df_resultado_segmento
 
-
-# --- Função Principal de Orquestração ---
-
+# --- Função Principal de Orquestração (Inalterada) ---
 def gerar_score_recuperacao(df_prospects: pd.DataFrame, caminho_pesos: str = "Control/Score_Manual/pesos.json") -> pd.DataFrame:
     """
-    Orquestra o processo completo de scoring a partir de um DataFrame.
-
-    1. Utiliza o DataFrame de prospects fornecido.
-    2. Carrega a configuração de pesos.
-    3. Pré-processa as features (numéricas e categóricas).
-    4. Calcula o score bruto ponderado.
-    5. Converte o score em uma probabilidade de recuperação.
-    6. Retorna o DataFrame original com as colunas de score, ordenado pela probabilidade.
+    Orquestra o processo de scoring, segmentando os prospects em PF e PJ.
     """
-    # A leitura do CSV foi removida. A função agora recebe o DataFrame diretamente.
-    configuracao = _carregar_configuracao_pesos(caminho_pesos)
-    
-    pesos_numericos = configuracao.get('pesos_numericos', {})
-    pesos_categoricos = configuracao.get('pesos_categoricos', {})
-    
-    # Identificação Dinâmica de Colunas
-    # Garante que a coluna 'id_cliente' exista antes de tentar removê-la.
-    colunas_a_remover = ['id_cliente']
-    df_features = df_prospects.drop(columns=[col for col in colunas_a_remover if col in df_prospects.columns])
-    
-    colunas_numericas = df_features.select_dtypes(include=np.number).columns.tolist()
-    colunas_categoricas = df_features.select_dtypes(include=['object', 'category']).columns.tolist()
+    configuracao_completa = _carregar_configuracao_pesos(caminho_pesos)
+    df_trabalho = df_prospects.copy()
 
-    # Execução do Pipeline de Scoring
-    df_processado = _preprocessar_features(df_features, colunas_numericas, colunas_categoricas)
-    score_bruto = _calcular_score_bruto(df_processado, pesos_numericos, pesos_categoricos)
-    probabilidade = _converter_score_para_probabilidade(score_bruto)
+    df_trabalho['tipo_pessoa'] = df_trabalho['documento'].str.replace(r'\D', '', regex=True).str.len().map({11: 'pf', 14: 'pj'})
 
-    # Consolidação do Resultado
-    df_resultado = df_prospects.copy()
-    df_resultado['score_ranking_bruto'] = score_bruto
-    df_resultado['score_recuperacao'] = probabilidade
+    df_pf = df_trabalho[df_trabalho['tipo_pessoa'] == 'pf'].copy()
+    df_pj = df_trabalho[df_trabalho['tipo_pessoa'] == 'pj'].copy()
+
+    print(f"Processando {len(df_pf)} CPFs com o modelo PF...")
+    resultado_pf = _calcular_score_segmento(df_pf, configuracao_completa.get('pf', {}))
     
-    return df_resultado.sort_values(by='score_recuperacao', ascending=False)
+    print(f"Processando {len(df_pj)} CNPJs com o modelo PJ...")
+    resultado_pj = _calcular_score_segmento(df_pj, configuracao_completa.get('pj', {}))
 
-# # --- Exemplo de Uso ---
-# if __name__ == '__main__':
-#     # Simula a criação de um DataFrame, como seria feito no app.py
-#     dados_exemplo = {
-#         'id_cliente': [1, 2, 3, 4],
-#         'valor_divida_mil': [10, 5, 20, 2],
-#         'tempo_inadimplencia_dias': [365, 180, 730, 90],
-#         'origem_divida': ['BANCO', 'TELECOM', 'VAREJO', 'BANCO'],
-#         'possui_outras_dividas': ['SIM', 'NAO', 'SIM', 'NAO']
-#     }
-#     df_para_score = pd.DataFrame(dados_exemplo)
-
-#     # O arquivo de pesos ainda é carregado do disco, o que é o comportamento esperado.
-#     # (O código para criar o arquivo de pesos pode ser omitido se ele já existir)
-
-#     # Executa a função principal passando o DataFrame
-#     df_final_score = gerar_score_recuperacao(df_prospects=df_para_score)
+    df_final = pd.concat([resultado_pf, resultado_pj], ignore_index=True)
     
-#     print("--- DataFrame Final com Score de Recuperação ---")
-#     print(df_final_score)
+    df_final.to_csv("DF_FINAL.csv")
+    
+    return df_final.sort_values(by='score_recuperacao', ascending=False)

@@ -78,7 +78,11 @@ def get_bar(values):
         
     return fig
 
-def get_hist(resultados):
+def get_hist(resultados, simul_count):
+    media = resultados.get("media_recuperacao", 0)
+    p5 = resultados.get("percentil_5", 0)
+    p95 = resultados.get("percentil_95", 0)
+    
     fig = go.Figure()
 
     # Adicionar o histograma dos resultados
@@ -91,7 +95,7 @@ def get_hist(resultados):
 
     # Adicionar uma linha vertical para a Média
     fig.add_vline(
-        x=resultados.get("media_recuperacao") + 100, 
+        x=media + 100, 
         line_width=3, 
         line_dash="dash", 
         line_color="firebrick",
@@ -99,33 +103,40 @@ def get_hist(resultados):
         annotation_position="top right"
     )
 
-    # Adicionar linhas para os percentis
-    fig.add_vline(x=resultados.get("percentil_5"), line_width=2, line_dash="dot", line_color="orange", annotation_text="P5")
-    fig.add_vline(x=resultados.get("percentil_95"), line_width=2, line_dash="dot", line_color="limegreen", annotation_text="P95")
-    # fig.add_vline(x=resultados.get("1_DV"), line_width=2, line_dash="dot", line_color="white", annotation_text="1 DV")
-    # fig.add_vline(x=resultados.get("11_DV"), line_width=2, line_dash="dot", line_color="white", annotation_text="11 DV")
-    # fig.add_vline(x=resultados.get("2_DV"), line_width=2, line_dash="dot", line_color="blue", annotation_text="2 DV")
-    # fig.add_vline(x=resultados.get("22_DV"), line_width=2, line_dash="dot", line_color="blue", annotation_text="22 DV")
+    # Adiciona linhas verticais para os cenários
+    fig.add_vline(x=media, line_width=2, line_dash="dash", line_color="orange",
+                  annotation_text="Média", annotation_position="top right")
+    fig.add_vline(x=p5, line_width=2, line_dash="dash", line_color="#FF4B4B", # Vermelho Streamlit
+                  annotation_text="Pessimista (5%)", annotation_position="top left")
+    fig.add_vline(x=p95, line_width=2, line_dash="dash", line_color="#3D9970", # Verde
+                  annotation_text="Otimista (95%)", annotation_position="top right")
 
-    # Customizar o layout
+    # Layout e design do gráfico
     fig.update_layout(
-        # title_text='Distribuição de Resultados da Simulação de Monte Carlo',
-        xaxis_title='Valor Total Recuperado (R$)',
-        yaxis_title=f'Frequência (x{resultados.get("simulacoes")})',
-        bargap=0.1
+        title_text='<b>Distribuição do Valor Recuperado</b>',
+        xaxis_title_text='Valor Recuperado por Simulação (R$)',
+        yaxis_title_text=f'Frequência (x{simul_count})',
+        bargap=0.1,
+        template='plotly_white',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
     return fig
 
-def get_scatter_pca(dataframe):
-    # Criar um gráfico de dispersão interativo
+def get_scatter_pca(dataframe_resultado_pca):
+    """Cria um gráfico de dispersão dos dois primeiros componentes principais (PCA)."""
     fig = px.scatter(
-        dataframe,
+        dataframe_resultado_pca,
         x='PC_1',
         y='PC_2',
-        color='score_risco_interno', # Colorir os pontos pelo score de risco
-        hover_data=['id_cliente', 'valor_divida_mil'],
-        title='Visualização de Clientes com os 2 Primeiros Componentes Principais'
+        title='<b>Análise de Componentes Principais (PCA)</b>',
+        labels={'PC_1': 'Componente Principal 1', 'PC_2': 'Componente Principal 2'},
+        template='plotly_white',
+        # Adicionando cor e tamanho para dar mais informação
+        color='valor_divida_mil', 
+        size='tempo_inadimplencia_dias',
+        hover_data=['id_cliente'],
+        color_continuous_scale=px.colors.sequential.Viridis
     )
-        
+    fig.update_traces(marker=dict(opacity=0.8, line=dict(width=0.5, color='DarkSlateGrey')))
     return fig
